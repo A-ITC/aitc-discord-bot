@@ -1,0 +1,8 @@
+{
+  "name": "ping",
+  "type": 1,
+  "description": "Bot の疎通を確認します",
+  "options": [],
+  "default_member_permissions": null,
+  "nsfw": false
+}

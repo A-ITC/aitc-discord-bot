@@ -94,7 +94,7 @@ Discord がエンドポイント確認に使う `PING` Interaction と、利用�
 
 1. イベントの `body` を取得する。`isBase64Encoded` が true の場合は Base64 を検証して復号し、それ以外は UTF-8 のバイト列にする。
 2. ヘッダー名を大文字・小文字を区別せず扱い、`X-Signature-Ed25519` と `X-Signature-Timestamp` を取得する。重複値・欠落・不正形式を拒否する。
-3. PyNaCl の Ed25519 検証を使い、タイムスタンプの文字列表現を UTF-8 化したものと、受信ボディのバイト列を連結して検証する。JSON の再シリアライズを署名検証に使わない。
+3. cryptography の Ed25519 検証を使い、タイムスタンプの文字列表現を UTF-8 化したものと、受信ボディのバイト列を連結して検証する。JSON の再シリアライズを署名検証に使わない。
 4. アプリ側の再送攻撃対策として、署名済みタイムスタンプと現在時刻の差が前後 300 秒以内であることを確認する。これは初期設定値であり、Discord が定めた期限ではない。
 5. 検証後に JSON を解析し、オブジェクトであることと処理に必要なフィールドを確認する。
 
@@ -151,9 +151,9 @@ PING はギルド情報を前提とせず、署名と時刻の検証後に処理
 | 実行方式      | オンデマンド。Provisioned Concurrency なし     |
 | VPC 接続      | なし                                           |
 | ハンドラー    | `app.lambda_handler`                           |
-| 主な外部依存  | PyNaCl。互換性を確認したバージョンと依存を固定 |
+| 主な外部依存  | cryptography。互換性を確認したバージョンと依存を固定 |
 
-Web フレームワークや discord.py を導入せず、API Gateway イベントを直接処理する。公開鍵と許可リストは初期化時に検証・解析し、リクエスト間で再利用する。利用者ごとの状態や Interaction Token は保持しない。
+Web フレームワークや discord.py を導入せず、API Gateway イベントを直接処理する。公開鍵と許可リストは初期化時に検証・解析し、リクエスト間で再利用する。署名検証には `cryptography==50.0.2` の `Ed25519PublicKey.verify` を使う。[cryptography の Ed25519 仕様](https://cryptography.io/en/latest/hazmat/primitives/asymmetric/ed25519/) 利用者ごとの状態や Interaction Token は保持しない。
 
 Lambda のタイムアウトを 3 秒にしても、API Gateway とネットワークを含む Discord の応答期限を保証できない。初期化を含む実測を受入条件とし、依存関係の削減、メモリ調整などを行っても満たせなければ、本番切り替えを止めて実行方式を見直す。Provisioned Concurrency の採用は追加費用を伴う別の判断とする。[AWS の Provisioned Concurrency](https://docs.aws.amazon.com/lambda/latest/dg/provisioned-concurrency.html)
 
@@ -239,9 +239,9 @@ aitc-discord-bot/
 
 `app.py` はイベント変換とエラー境界、`verification.py` は署名・時刻検証、`interactions.py` は許可先の照合と振り分けを担当する。`commands/ping.py` は応答データを返し、AWS や Discord API の呼び出しを持たない。コマンド追加時はこの振り分けと登録定義を拡張する。
 
-`build.ps1` は uv を使って Linux arm64・Python 3.13 向けのバイナリ依存を取得し、ソースと依存を ZIP 化する。Windows のパッケージを混在させない。PyNaCl のようなネイティブ依存は Lambda の OS・アーキテクチャに適合させる必要がある。[AWS の Python ZIP 配布仕様](https://docs.aws.amazon.com/lambda/latest/dg/python-package.html)
+`build.ps1` は uv を使って Linux arm64・Python 3.13 向けのバイナリ依存を取得し、ソースと依存を ZIP 化する。Windows のパッケージを混在させない。cryptography のようなネイティブ依存は Lambda の OS・アーキテクチャに適合させる必要がある。[AWS の Python ZIP 配布仕様](https://docs.aws.amazon.com/lambda/latest/dg/python-package.html)
 
-`deploy.ps1` はテスト成功を確認してからビルド・S3 アップロード・CloudFormation 更新を実行し、スタック完了まで待機する。外部コマンドの終了コードを検査し、途中失敗時は後続処理を止める。変更セットの内容と更新対象アカウント・リージョン・スタックを表示してから適用する。更新前のテンプレート、パラメーター、成果物キーを控え、以前の ZIP を保持する。
+`deploy.ps1` はテスト成功を確認してからビルド・S3 アップロード・CloudFormation 更新を実行し、スタック完了まで待機する。外部コマンドの終了コードを検査し、途中失敗時は後続処理を止める。変更セットの内容と更新対象アカウント・リージョン・スタックを表示してから適用する。更新前のテンプレート、パラメーター、成果物キーを控え、以前の ZIP を保持する。既定の実行は変更セットの作成までとし、レビュー後に同じ変更セット名を `-ExecuteChangeSet` へ渡して適用する。
 
 `sync-commands.ps1` は明示的に実行したときだけ、許可ギルドごとに `/ping` を登録・更新する。通常運用では `POST` の同名 upsert を使い、コマンド一括上書きによる削除を行わない。登録後に GET で定義を照合し、差分があれば失敗とする。Discord API の `429` は指定の待機時間に従い、回数と総待機時間に上限を設けて再試行する。
 
@@ -301,7 +301,7 @@ API アクセスログは request ID、ルート、HTTP ステータス、レス
 | 移行           | バックアップ必須、変更後の定義の拒否、削除スコープ、途中再開、通常デプロイで削除されないこと |
 | 配布とインフラ | 固定依存の Linux arm64 向け ZIP、ハンドラー配置、CloudFormation 構文、ログと権限設定         |
 
-Python のテストは uv と unittest で実行し、AWS と Discord の管理 API はモックする。署名検証自体は実際の PyNaCl と一時テスト鍵で確認する。スクリプトの検証は AWS CLI と REST 呼び出しを置き換えて行う。
+Python のテストは uv と unittest で実行し、AWS と Discord の管理 API はモックする。署名検証自体は実際の cryptography と一時テスト鍵で確認する。スクリプトの検証は AWS CLI と REST 呼び出しを置き換えて行う。
 
 ### 実環境での受入条件
 

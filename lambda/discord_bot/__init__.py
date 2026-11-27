@@ -1,0 +1,1 @@
+"""Stateless Discord HTTP interactions."""
