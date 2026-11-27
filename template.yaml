@@ -30,6 +30,8 @@ Resources:
   HttpApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
+      Tags:
+        service: aitc-discord-bot
       Name: !Sub '${AWS::StackName}-http'
       ProtocolType: HTTP
       DisableExecuteApiEndpoint: false
@@ -39,6 +41,9 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
+      Tags:
+        - Key: service
+          Value: aitc-discord-bot
       LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-interactions'
       RetentionInDays: 30
 
@@ -47,11 +52,18 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
+      Tags:
+        - Key: service
+          Value: aitc-discord-bot
+      LogGroupName: !Sub '/aws/apigateway/${AWS::StackName}-interactions'
       RetentionInDays: 30
 
   FunctionRole:
     Type: AWS::IAM::Role
     Properties:
+      Tags:
+        - Key: service
+          Value: aitc-discord-bot
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -71,6 +83,9 @@ Resources:
   InteractionsFunction:
     Type: AWS::Lambda::Function
     Properties:
+      Tags:
+        - Key: service
+          Value: aitc-discord-bot
       FunctionName: !Sub '${AWS::StackName}-interactions'
       Runtime: python3.13
       Architectures: [arm64]
@@ -107,6 +122,8 @@ Resources:
   Stage:
     Type: AWS::ApiGatewayV2::Stage
     Properties:
+      Tags:
+        service: aitc-discord-bot
       ApiId: !Ref HttpApi
       StageName: $default
       AutoDeploy: true
