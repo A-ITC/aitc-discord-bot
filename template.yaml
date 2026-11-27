@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AITC Discord guild slash commands on HTTP API and Python Lambda.
+
+Parameters:
+  ArtifactBucket:
+    Type: String
+    MinLength: 3
+  ArtifactKey:
+    Type: String
+    MinLength: 1
+  DiscordApplicationId:
+    Type: String
+    AllowedPattern: '^[0-9]{17,20}$'
+  DiscordPublicKey:
+    Type: String
+    AllowedPattern: '^[0-9a-fA-F]{64}$'
+  AllowedGuildIds:
+    Type: CommaDelimitedList
+    AllowedPattern: '^[0-9]{17,20}$'
+  ThrottlingRateLimit:
+    Type: Number
+    Default: 5
+    MinValue: 1
+  ThrottlingBurstLimit:
+    Type: Number
+    Default: 10
+    MinValue: 1
+
+Resources:
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-http'
+      ProtocolType: HTTP
+      DisableExecuteApiEndpoint: false
+
+  FunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-interactions'
+      RetentionInDays: 30
+
+  AccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RetentionInDays: 30
+
+  FunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WriteOwnLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt FunctionLogGroup.Arn
+
+  InteractionsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-interactions'
+      Runtime: python3.13
+      Architectures: [arm64]
+      Handler: app.lambda_handler
+      MemorySize: 512
+      Timeout: 3
+      Role: !GetAtt FunctionRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref ArtifactKey
+      Environment:
+        Variables:
+          DISCORD_APPLICATION_ID: !Ref DiscordApplicationId
+          DISCORD_PUBLIC_KEY: !Ref DiscordPublicKey
+          ALLOWED_GUILD_IDS: !Join [',', !Ref AllowedGuildIds]
+
+  Integration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt InteractionsFunction.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 5000
+
+  InteractionsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /interactions
+      AuthorizationType: NONE
+      Target: !Join ['/', [integrations, !Ref Integration]]
+
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: $default
+      AutoDeploy: true
+      DefaultRouteSettings:
+        DetailedMetricsEnabled: true
+        ThrottlingRateLimit: !Ref ThrottlingRateLimit
+        ThrottlingBurstLimit: !Ref ThrottlingBurstLimit
+      AccessLogSettings:
+        DestinationArn: !GetAtt AccessLogGroup.Arn
+        Format: '{"request_id":"$context.requestId","route":"$context.routeKey","status":"$context.status","response_latency_ms":"$context.responseLatency","integration_status":"$context.integrationStatus"}'
+
+  InvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref InteractionsFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/POST/interactions'
+
+Outputs:
+  InteractionsEndpointUrl:
+    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/interactions'
+  FunctionName:
+    Value: !Ref InteractionsFunction
+  FunctionLogGroupName:
+    Value: !Ref FunctionLogGroup
+  AccessLogGroupName:
+    Value: !Ref AccessLogGroup
