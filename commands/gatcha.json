@@ -1,0 +1,227 @@
+{
+  "type": 1,
+  "name": "gatcha",
+  "description": "AITCの作品を抽選・管理します",
+  "options": [
+    {
+      "type": 1,
+      "name": "draw",
+      "description": "ランダムな作品を公開投稿します",
+      "options": [
+        {
+          "type": 3,
+          "name": "server",
+          "description": "登録元サーバー",
+          "choices": [
+            {
+              "name": "AITC",
+              "value": "aitc"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": 2,
+      "name": "channel",
+      "description": "作品の登録元を管理します",
+      "options": [
+        {
+          "type": 1,
+          "name": "add",
+          "description": "実行したチャンネルを登録元に追加します"
+        },
+        {
+          "type": 1,
+          "name": "remove",
+          "description": "実行したチャンネルを登録元から外します"
+        }
+      ]
+    },
+    {
+      "type": 2,
+      "name": "timer",
+      "description": "全サーバーの定時投稿を管理します",
+      "options": [
+        {
+          "type": 1,
+          "name": "config",
+          "description": "指定サーバーの投稿先と週1回の投稿日時を置き換えます",
+          "options": [
+            {
+              "type": 3,
+              "name": "guild",
+              "description": "投稿先サーバーID",
+              "required": true,
+              "min_length": 17,
+              "max_length": 20
+            },
+            {
+              "type": 3,
+              "name": "channel",
+              "description": "投稿先チャンネルID",
+              "required": true,
+              "min_length": 17,
+              "max_length": 20
+            },
+            {
+              "type": 3,
+              "name": "day",
+              "description": "投稿する曜日（日本時間）",
+              "required": true,
+              "choices": [
+                {
+                  "name": "月曜",
+                  "value": "MON"
+                },
+                {
+                  "name": "火曜",
+                  "value": "TUE"
+                },
+                {
+                  "name": "水曜",
+                  "value": "WED"
+                },
+                {
+                  "name": "木曜",
+                  "value": "THU"
+                },
+                {
+                  "name": "金曜",
+                  "value": "FRI"
+                },
+                {
+                  "name": "土曜",
+                  "value": "SAT"
+                },
+                {
+                  "name": "日曜",
+                  "value": "SUN"
+                }
+              ]
+            },
+            {
+              "type": 4,
+              "name": "hour",
+              "description": "投稿する時刻（日本時間、毎正時）",
+              "required": true,
+              "choices": [
+                {
+                  "name": "00:00",
+                  "value": 0
+                },
+                {
+                  "name": "01:00",
+                  "value": 1
+                },
+                {
+                  "name": "02:00",
+                  "value": 2
+                },
+                {
+                  "name": "03:00",
+                  "value": 3
+                },
+                {
+                  "name": "04:00",
+                  "value": 4
+                },
+                {
+                  "name": "05:00",
+                  "value": 5
+                },
+                {
+                  "name": "06:00",
+                  "value": 6
+                },
+                {
+                  "name": "07:00",
+                  "value": 7
+                },
+                {
+                  "name": "08:00",
+                  "value": 8
+                },
+                {
+                  "name": "09:00",
+                  "value": 9
+                },
+                {
+                  "name": "10:00",
+                  "value": 10
+                },
+                {
+                  "name": "11:00",
+                  "value": 11
+                },
+                {
+                  "name": "12:00",
+                  "value": 12
+                },
+                {
+                  "name": "13:00",
+                  "value": 13
+                },
+                {
+                  "name": "14:00",
+                  "value": 14
+                },
+                {
+                  "name": "15:00",
+                  "value": 15
+                },
+                {
+                  "name": "16:00",
+                  "value": 16
+                },
+                {
+                  "name": "17:00",
+                  "value": 17
+                },
+                {
+                  "name": "18:00",
+                  "value": 18
+                },
+                {
+                  "name": "19:00",
+                  "value": 19
+                },
+                {
+                  "name": "20:00",
+                  "value": 20
+                },
+                {
+                  "name": "21:00",
+                  "value": 21
+                },
+                {
+                  "name": "22:00",
+                  "value": 22
+                },
+                {
+                  "name": "23:00",
+                  "value": 23
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "remove",
+          "description": "指定サーバーの定時投稿設定を削除します",
+          "options": [
+            {
+              "type": 3,
+              "name": "guild",
+              "description": "投稿先サーバーID",
+              "required": true,
+              "min_length": 17,
+              "max_length": 20
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

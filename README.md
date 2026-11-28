@@ -1,8 +1,18 @@
 # AITC Discord Bot
 
-指定した Discord サーバーの `/ping` を、API Gateway HTTP API と Python 3.13／arm64 Lambda で処理します。応答は本人だけに表示される `Pong!` です。prod 一環境を CloudFormation と PowerShell で管理します。
+指定したDiscordサーバーの `/ping` と `/gatcha` を、API Gateway HTTP APIとPython 3.13／arm64 Lambdaで処理します。`/ping` は本人だけへの `Pong!`、`/gatcha draw` はAITCの登録作品の公開投稿です。prod一環境をCloudFormationとPowerShellで管理します。
 
-[設計書](docs/design.md) に構成、署名検証、権限、移行と受入条件をまとめています。署名検証は既存の `aitc-auth-api` と同じ `cryptography==50.0.2` の Ed25519 を使用します。Lambda は公開鍵と許可ギルド設定だけを持ち、Bot Token や外部 API 呼び出しを必要としません。
+[設計書](docs/design.md) に構成、署名検証、権限、移行と受入条件をまとめています。署名検証は既存の `aitc-auth-api` と同じ `cryptography==50.0.2` の Ed25519 を使用します。受付Lambdaは署名を検証して配信ジョブをSQSへ投入します。ワーカーはDynamoDBで作品・設定・独立した履歴を管理し、Parameter Storeから取得したBot TokenでDiscord APIを呼びます。定時投稿は1時間ごとのEventBridge Schedulerで起動します。
+
+[gatchaの仕様・コマンド・導入手順](docs/gatcha.md) に、管理者ロール、登録元チャンネル、JSTの投稿枠、IAM認証のWeb逆引きAPI、失敗時の扱いをまとめています。
+
+[DynamoDBデータ設計](docs/data-tables.md) に、保存する7種類のデータ、キー・属性・JSON例、ジョブ状態、保持方針をまとめています。
+
+## システム構成
+
+![AITC Discord Bot システム構成図](docs/system-architecture.svg)
+
+[AWSリソースの関係と管理範囲](docs/system-architecture.md) ／ [PNG版](docs/system-architecture.png)
 
 ## ローカル検証
 
@@ -55,6 +65,8 @@ Token は非表示入力で受け取り、アクセスを現在のユーザー�
 通常のデプロイは Discord 側の Endpoint URL・コマンド・旧 Bot のプロセスを変更しません。更新時の旧テンプレートと旧パラメーターは `dist/deploy-<ID>/previous-*` に保存されます。以前の ZIP も保持するため、障害時はこれらを使って CloudFormation から前の構成へ戻します。ロググループはスタック削除後も保持します。
 
 ## 旧 Bot の切り替え
+
+この節は初期 `/ping` 移行時の手順です。gatcha導入後の更新・復旧は [gatchaの運用手順](docs/gatcha.md#導入更新) に従います。
 
 1. 旧プロセスを停止・再起動できることと旧成果物を確認し、メンテナンス時間を確保します。
 2. 全導入先のギルドと既存 Endpoint URL を確認し、登録済みのコマンドと権限をバックアップします。コマンド専用のインストール先は手動でも棚卸しし、必要なら `LegacyGuildIds` を追加して新しいバックアップを取ります。

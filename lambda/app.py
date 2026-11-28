@@ -1,4 +1,4 @@
-"""API Gateway HTTP API v2 handler. No network calls at import or invocation."""
+"""Signed HTTP intake, plus separately configured SQS and scheduler entry points."""
 
 import json
 import logging
@@ -57,3 +57,13 @@ def lambda_handler(event, context):
     record.update(status=status, result=reason, duration_ms=round((time.perf_counter() - started) * 1000, 3))
     LOGGER.log(logging.ERROR if status >= 500 else logging.INFO, json.dumps(record, ensure_ascii=False))
     return response
+
+
+def gatcha_worker_handler(event, context):
+    from discord_bot.gatcha.runtime import worker_handler
+    return worker_handler(event, context)
+
+
+def gatcha_schedule_handler(event, context):
+    from discord_bot.gatcha.runtime import schedule_handler
+    return schedule_handler(event, context)

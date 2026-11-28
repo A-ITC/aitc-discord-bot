@@ -52,4 +52,8 @@ def dispatch(interaction: dict, config: Config) -> dict:
         if "options" in data and data["options"] != []:
             raise RequestError(400, "invalid_options")
         return execute()
+    if ((data["type"] == 1 and data["name"] == "gatcha")
+            or (data["type"] == 3 and data["name"] in ("gatcha register", "gatcha remove"))):
+        from .gatcha.runtime import accept
+        return accept(interaction, config)
     return message("このコマンドは現在利用できません。")

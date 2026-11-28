@@ -1,5 +1,7 @@
 # aitc-discord-bot サーバーレス実行基盤設計
 
+本書は `/ping` 初期版の設計です。issue #3で追加するgatchaコマンド・DynamoDB・SQS・配信ワーカー・Scheduler・実行時Token取得については [gatcha設計と運用](gatcha.md) を参照してください。以下の「DB・キューなし」「実行系のToken取得なし」は初期 `/ping` の範囲を示します。
+
 Slash Command を API Gateway HTTP API と AWS Lambda で処理する。
 初期版は指定サーバーの `/ping` のみを提供する。
 実装・移行を担当する開発者向けに、処理仕様、インフラ、手動運用、移行と受入条件を定める。

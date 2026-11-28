@@ -17,6 +17,23 @@ Parameters:
   AllowedGuildIds:
     Type: CommaDelimitedList
     AllowedPattern: '^[0-9]{17,20}$'
+  GatchaSourceGuildId:
+    Type: String
+    AllowedPattern: '^[0-9]{17,20}$'
+  BotTokenParameterName:
+    Type: String
+    AllowedPattern: '^/[A-Za-z0-9_./-]+$'
+  WebLookupApiId:
+    Type: String
+    AllowedPattern: '^[a-z0-9]+$'
+  WebLookupRegion:
+    Type: String
+    Default: ap-northeast-1
+    AllowedPattern: '^[a-z]{2}(-[a-z]+)+-[0-9]+$'
+  WebProfileBaseUrl:
+    Type: String
+    Default: https://a-i-t-c.com
+    AllowedPattern: '^https://[A-Za-z0-9.-]+/?$'
   ThrottlingRateLimit:
     Type: Number
     Default: 5
@@ -80,6 +97,14 @@ Resources:
                 Action: [logs:CreateLogStream, logs:PutLogEvents]
                 Resource: !GetAtt FunctionLogGroup.Arn
 
+        - PolicyName: EnqueueGatcha
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt GatchaQueue.Arn
+
   InteractionsFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -101,6 +126,13 @@ Resources:
           DISCORD_APPLICATION_ID: !Ref DiscordApplicationId
           DISCORD_PUBLIC_KEY: !Ref DiscordPublicKey
           ALLOWED_GUILD_IDS: !Join [',', !Ref AllowedGuildIds]
+          GATCHA_SOURCE_GUILD_ID: !Ref GatchaSourceGuildId
+          GATCHA_TABLE_NAME: !Ref GatchaTable
+          GATCHA_QUEUE_URL: !Ref GatchaQueue
+          BOT_TOKEN_PARAMETER_NAME: !Ref BotTokenParameterName
+          WEB_LOOKUP_API_ID: !Ref WebLookupApiId
+          WEB_LOOKUP_REGION: !Ref WebLookupRegion
+          WEB_PROFILE_BASE_URL: !Ref WebProfileBaseUrl
 
   Integration:
     Type: AWS::ApiGatewayV2::Integration
@@ -144,6 +176,239 @@ Resources:
       SourceAccount: !Ref AWS::AccountId
       SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/POST/interactions'
 
+
+  GatchaTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: service
+          Value: aitc-discord-bot
+
+  GatchaDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      SqsManagedSseEnabled: true
+      MessageRetentionPeriod: 1209600
+
+  GatchaQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      SqsManagedSseEnabled: true
+      VisibilityTimeout: 90
+      MessageRetentionPeriod: 900
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt GatchaDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  WorkerLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-gatcha-worker'
+      RetentionInDays: 30
+
+  SchedulerLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-gatcha-scheduler'
+      RetentionInDays: 30
+
+  WorkerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: GatchaWorker
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt WorkerLogGroup.Arn
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:Query, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:DeleteItem]
+                Resource: !GetAtt GatchaTable.Arn
+              - Effect: Allow
+                Action: [sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes]
+                Resource: !GetAtt GatchaQueue.Arn
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${BotTokenParameterName}'
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'
+                Condition:
+                  StringEquals:
+                    'kms:ViaService': !Sub 'ssm.${AWS::Region}.${AWS::URLSuffix}'
+                    'kms:EncryptionContext:PARAMETER_ARN': !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${BotTokenParameterName}'
+              - Effect: Allow
+                Action: execute-api:Invoke
+                Resource: !Sub 'arn:${AWS::Partition}:execute-api:${WebLookupRegion}:${AWS::AccountId}:${WebLookupApiId}/*/GET/members-only/members/discord'
+
+  SchedulerFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: FindAndEnqueueDueTimers
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt SchedulerLogGroup.Arn
+              - Effect: Allow
+                Action: dynamodb:Query
+                Resource: !GetAtt GatchaTable.Arn
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt GatchaQueue.Arn
+
+  GatchaWorkerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-gatcha-worker'
+      Runtime: python3.13
+      Architectures: [arm64]
+      Handler: app.gatcha_worker_handler
+      MemorySize: 1024
+      Timeout: 60
+      Role: !GetAtt WorkerRole.Arn
+      LoggingConfig:
+        LogGroup: !Ref WorkerLogGroup
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref ArtifactKey
+      Environment:
+        Variables:
+          DISCORD_APPLICATION_ID: !Ref DiscordApplicationId
+          DISCORD_PUBLIC_KEY: !Ref DiscordPublicKey
+          ALLOWED_GUILD_IDS: !Join [',', !Ref AllowedGuildIds]
+          GATCHA_SOURCE_GUILD_ID: !Ref GatchaSourceGuildId
+          GATCHA_TABLE_NAME: !Ref GatchaTable
+          GATCHA_QUEUE_URL: !Ref GatchaQueue
+          BOT_TOKEN_PARAMETER_NAME: !Ref BotTokenParameterName
+          WEB_LOOKUP_API_ID: !Ref WebLookupApiId
+          WEB_LOOKUP_REGION: !Ref WebLookupRegion
+          WEB_PROFILE_BASE_URL: !Ref WebProfileBaseUrl
+  GatchaQueueConsumer:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt GatchaQueue.Arn
+      FunctionName: !Ref GatchaWorkerFunction
+      BatchSize: 1
+      FunctionResponseTypes: [ReportBatchItemFailures]
+
+  GatchaSchedulerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-gatcha-scheduler'
+      Runtime: python3.13
+      Architectures: [arm64]
+      Handler: app.gatcha_schedule_handler
+      MemorySize: 256
+      Timeout: 30
+      Role: !GetAtt SchedulerFunctionRole.Arn
+      LoggingConfig:
+        LogGroup: !Ref SchedulerLogGroup
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref ArtifactKey
+      Environment:
+        Variables:
+          DISCORD_APPLICATION_ID: !Ref DiscordApplicationId
+          DISCORD_PUBLIC_KEY: !Ref DiscordPublicKey
+          ALLOWED_GUILD_IDS: !Join [',', !Ref AllowedGuildIds]
+          GATCHA_SOURCE_GUILD_ID: !Ref GatchaSourceGuildId
+          GATCHA_TABLE_NAME: !Ref GatchaTable
+          GATCHA_QUEUE_URL: !Ref GatchaQueue
+          BOT_TOKEN_PARAMETER_NAME: !Ref BotTokenParameterName
+          WEB_LOOKUP_API_ID: !Ref WebLookupApiId
+          WEB_LOOKUP_REGION: !Ref WebLookupRegion
+          WEB_PROFILE_BASE_URL: !Ref WebProfileBaseUrl
+  GatchaSchedulerRetry:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName: !Ref GatchaSchedulerFunction
+      Qualifier: $LATEST
+      MaximumEventAgeInSeconds: 300
+      MaximumRetryAttempts: 2
+
+  GatchaScheduleGroup:
+    Type: AWS::Scheduler::ScheduleGroup
+
+  GatchaScheduleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                'aws:SourceAccount': !Ref AWS::AccountId
+              ArnEquals:
+                'aws:SourceArn': !GetAtt GatchaScheduleGroup.Arn
+      Policies:
+        - PolicyName: InvokeHourlyDispatcher
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt GatchaSchedulerFunction.Arn
+
+  GatchaHourlySchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      GroupName: !Ref GatchaScheduleGroup
+      ScheduleExpression: 'cron(0 * * * ? *)'
+      ScheduleExpressionTimezone: Asia/Tokyo
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn: !GetAtt GatchaSchedulerFunction.Arn
+        RoleArn: !GetAtt GatchaScheduleRole.Arn
+        Input: '{"scheduled_time":"<aws.scheduler.scheduled-time>"}'
+        RetryPolicy:
+          MaximumEventAgeInSeconds: 300
+          MaximumRetryAttempts: 2
+
 Outputs:
   InteractionsEndpointUrl:
     Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/interactions'
@@ -153,3 +418,11 @@ Outputs:
     Value: !Ref FunctionLogGroup
   AccessLogGroupName:
     Value: !Ref AccessLogGroup
+  GatchaTableName:
+    Value: !Ref GatchaTable
+  GatchaQueueUrl:
+    Value: !Ref GatchaQueue
+  GatchaDeadLetterQueueUrl:
+    Value: !Ref GatchaDeadLetterQueue
+  GatchaWorkerRoleArn:
+    Value: !GetAtt WorkerRole.Arn

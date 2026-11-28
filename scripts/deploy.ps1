@@ -6,6 +6,7 @@ param(
 )
 . (Join-Path $PSScriptRoot 'common.ps1')
 $config = Read-BotConfig $ConfigPath
+Assert-GatchaConfig $config
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $identity = Invoke-AwsJson $config @('sts','get-caller-identity')
 Write-Host "Account=$($identity.Account) Region=$($config.AwsRegion) Stack=$($config.StackName)"
@@ -14,6 +15,7 @@ if ($ExecuteChangeSet) {
     $change = Invoke-AwsJson $config @('cloudformation','describe-change-set','--stack-name',$config.StackName,'--change-set-name',$ExecuteChangeSet)
     if ($change.Status -ne 'CREATE_COMPLETE' -or $change.ExecutionStatus -ne 'AVAILABLE') { throw 'Change set is not ready to execute' }
     $expected = @{ DiscordApplicationId = $config.DiscordApplicationId; DiscordPublicKey = $config.DiscordPublicKey; AllowedGuildIds = ($config.AllowedGuildIds -join ',') }
+    foreach ($name in 'GatchaSourceGuildId','BotTokenParameterName','WebLookupApiId','WebLookupRegion','WebProfileBaseUrl') { $expected[$name] = $config[$name] }
     foreach ($name in $expected.Keys) {
         $actual = @($change.Parameters | Where-Object ParameterKey -EQ $name)
         if ($actual.Count -ne 1 -or $actual[0].ParameterValue -cne $expected[$name]) { throw "Change set does not match configuration: $name" }
@@ -48,6 +50,9 @@ $parameters = @(
     @{ ParameterKey = 'DiscordPublicKey'; ParameterValue = $config.DiscordPublicKey },
     @{ ParameterKey = 'AllowedGuildIds'; ParameterValue = ($config.AllowedGuildIds -join ',') }
 )
+foreach ($name in 'GatchaSourceGuildId','BotTokenParameterName','WebLookupApiId','WebLookupRegion','WebProfileBaseUrl') {
+    $parameters += @{ ParameterKey = $name; ParameterValue = $config[$name] }
+}
 if ($type -eq 'UPDATE') {
     $previous = Invoke-AwsJson $config @('cloudformation','describe-stacks','--stack-name',$config.StackName)
     $template = Invoke-AwsJson $config @('cloudformation','get-template','--stack-name',$config.StackName,'--template-stage','Original')
