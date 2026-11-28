@@ -11,14 +11,16 @@ issue #3 の仕様・運用手順です。`design.md` の `/ping` 初期版に�
 | `/gatcha channel remove` | AITC、管理者ロール | 実行したチャンネルの全作品を抽選対象から外す |
 | メッセージのアプリメニュー → `gatcha register` | AITC、管理者ロール | 右クリックした投稿を登録 |
 | メッセージのアプリメニュー → `gatcha remove` | AITC、管理者ロール | 右クリックした投稿を抽選対象から外す |
-| `/gatcha timer config guild:<ID> channel:<ID> schedule:MON@09,FRI@18` | AITC、管理者ロール | 指定サーバーの投稿先と全投稿枠を置換 |
+| `/gatcha timer config guild:<ID> channel:<ID> day:月曜 hour:09:00` | AITC、管理者ロール | 指定サーバーの投稿先と週1枠の曜日・時刻を置換 |
 | `/gatcha timer remove guild:<ID>` | AITC、管理者ロール | 指定サーバーの自動投稿設定を削除 |
 
 管理者ロールは **`840827308251283456`** の保持をコード側で判定します。DiscordのAdministrator権限だけでは代用しません。管理コマンドは登録元サーバーだけに登録し、他の許可済みサーバーには `draw` を登録します。管理操作の結果は本人だけに表示します。
 
 登録元は通常のテキスト／アナウンスチャンネルです。スレッドは登録できず、親チャンネルからの許可継承もありません。チャンネルを解除しても作品の登録情報を保持し、再追加すると、個別に解除・無効化されていない作品が抽選対象へ戻ります。作品の登録一覧は手動・自動で共用します。
 
-投稿先サーバーは既存の `AllowedGuildIds` で管理します。自動投稿は1サーバー1チャンネルで、曜日と時刻の組み合わせを複数指定できます。曜日は `MON`〜`SUN`、時刻はJSTの `00`〜`23` です。重複枠や分指定を拒否します。
+投稿先サーバーは既存の `AllowedGuildIds` で管理します。自動投稿は1サーバー1チャンネル・週1枠です。`day` と `hour` は別々の選択リストで、曜日は月曜〜日曜、時刻は日本時間（JST）の `00:00`〜`23:00` からそれぞれ1つ選びます。分指定や複数選択はできません。上記の例では毎週月曜09:00に投稿します。再実行すると、そのサーバーの投稿先と曜日・時刻をすべて置き換えます。
+
+内部値は曜日が `MON`〜`SUN`、時刻が整数 `0`〜`23` です。保存形式は既存の `slots` 配列を維持し、新しい設定は1要素として保存します。旧形式で保存済みの複数枠は更新するまで継続し、次の `timer config` で週1枠に置き換わります。
 
 ## 抽選と表示
 
@@ -54,7 +56,7 @@ Interaction ID、または配信先と予定日時から作るIDで重複ジョ�
 2. Webスタック出力 `DiscordMemberLookupApiId` とリージョンをBot設定の `WebLookupApiId`／`WebLookupRegion` に設定します。同じAWSアカウントのAPI Gatewayへ直接IAM署名して呼びます。`GatchaSourceGuildId` はAITCサーバーIDで、`AllowedGuildIds` に含めます。`WebProfileBaseUrl` は既存WebサイトのHTTPS Originです。
 3. Discord Developer Portalで **MESSAGE CONTENT INTENT** を有効化します。Botに登録元の閲覧・メッセージ履歴の閲覧、配信先のメッセージ送信・ファイル添付・埋め込みリンクの権限を付けます。Botが必要な全サーバーに導入されていることを確認します。
 4. 既存のBot TokenをSecureStringに保存したうえで `scripts/test.ps1`、`scripts/build.ps1`、`scripts/deploy.ps1` を実行し、変更セットを確認して適用します。AWS SDKも `requirements.txt` の固定版をZIPへ含めます。通常デプロイではDiscordコマンドを変更しません。
-5. `scripts/sync-commands.ps1` を明示的に実行してコマンドを登録します。`/ping` と同名upsertを使用し、無関係なコマンドを一括削除しません。
+5. `scripts/sync-commands.ps1` を明示的に実行してコマンドを登録します。曜日・時刻の選択リストへの更新時も、Lambdaをデプロイした後にこの同期が必要です。`/ping` と同名upsertを使用し、無関係なコマンドを一括削除しません。
 6. AITCの作品チャンネルで `channel add` を実行し、投稿のアプリメニューから作品を登録します。手動抽選と、サーバーを指定した `timer config` を確認します。
 
 `design.md` とREADMEの旧Bot切り替えは初期 `/ping` 移行時の手順です。旧移行のRestoreは `/ping` だけを新コマンドとして扱うため、gatcha導入後の復旧には本書の手順を使用します。コードを戻す場合はまず `timer remove` で各自動投稿を停止し、キューの処理状態を確認してから、保持した前バージョンのテンプレートとZIPで変更セットを作成します。コマンドを戻す際は保存した定義を個別にupsertし、新コマンドの削除も明示的に行います。DynamoDBは保持し、旧テンプレートへ戻す変更セットにテーブル・キューの削除が含まれる場合は処理中のジョブを確認してください。

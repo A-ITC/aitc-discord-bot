@@ -32,19 +32,12 @@ def snowflake(value):
     return value
 
 
-def schedule(value):
-    if not isinstance(value, str) or not 1 <= len(value) <= 2000:
-        raise InvalidCommand("曜日と時刻を MON@09,FRI@18 の形式で指定してください。")
-    slots = set()
-    for item in value.upper().split(","):
-        match = re.fullmatch(r"(MON|TUE|WED|THU|FRI|SAT|SUN)@([01][0-9]|2[0-3])", item.strip())
-        if not match:
-            raise InvalidCommand("曜日と時刻を MON@09,FRI@18 の形式で指定してください。")
-        slot = (DAYS.index(match[1]), int(match[2]))
-        if slot in slots:
-            raise InvalidCommand("投稿枠が重複しています。")
-        slots.add(slot)
-    return [{"day": day, "hour": hour} for day, hour in sorted(slots)]
+def schedule(day, hour):
+    if not isinstance(day, str) or day not in DAYS:
+        raise InvalidCommand("曜日は月曜〜日曜の選択肢から指定してください。")
+    if type(hour) is not int or not 0 <= hour <= 23:
+        raise InvalidCommand("時刻は00:00〜23:00の選択肢から指定してください。")
+    return [{"day": DAYS.index(day), "hour": hour}]
 
 
 def option_map(values, allowed):
@@ -86,13 +79,14 @@ def command(interaction, source_guild, allowed_guilds, now):
             if entry.get("type") != 1:
                 raise InvalidCommand("コマンド引数が不正です。")
             action = f"{group}_{child}"
-            names = {"guild", "channel", "schedule"} if action == "timer_config" else {"guild"} if group == "timer" else set()
+            names = {"guild", "channel", "day", "hour"} if action == "timer_config" else {"guild"} if group == "timer" else set()
             options = option_map(entry.get("options", []), names)
             if set(options) != names:
                 raise InvalidCommand("必要な引数を指定してください。")
             for name, item in options.items():
-                if item.get("type") != 3 or not isinstance(item.get("value"), str):
-                    raise InvalidCommand("引数は文字列で指定してください。")
+                expected_type, value_type = (4, int) if name == "hour" else (3, str)
+                if item.get("type") != expected_type or type(item.get("value")) is not value_type:
+                    raise InvalidCommand("引数の型が不正です。")
                 args[name] = item["value"]
             if group == "timer":
                 args["guild"] = snowflake(args["guild"])
@@ -100,7 +94,7 @@ def command(interaction, source_guild, allowed_guilds, now):
                     raise InvalidCommand("投稿先は許可済みサーバーから指定してください。")
                 if action == "timer_config":
                     args["channel"] = snowflake(args["channel"])
-                    args["slots"] = schedule(args.pop("schedule"))
+                    args["slots"] = schedule(args.pop("day"), args.pop("hour"))
     else:
         raise InvalidCommand("未対応のコマンドです。")
     if action != "draw":

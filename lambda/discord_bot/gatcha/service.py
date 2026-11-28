@@ -125,7 +125,7 @@ class Service:
                 self.text_channel(args["channel"], guild_id)
                 self.managed_put(job, "TIMERS", f"GUILD#{guild_id}", guild_id=guild_id, channel_id=args["channel"],
                                  slots=args["slots"], version=job["id"], active=True)
-                text = "投稿先チャンネルと全投稿枠を置き換えました（JST）。"
+                text = "投稿先チャンネルと曜日・時刻を置き換えました（JST、週1枠）。"
             else:
                 # A tombstone prevents an older queued config from recreating this timer.
                 self.managed_put(job, "TIMERS", f"GUILD#{guild_id}", guild_id=guild_id, active=False, version=job["id"])

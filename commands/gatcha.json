@@ -46,7 +46,7 @@
         {
           "type": 1,
           "name": "config",
-          "description": "指定サーバーの投稿先と全投稿枠を置き換えます",
+          "description": "指定サーバーの投稿先と週1回の投稿日時を置き換えます",
           "options": [
             {
               "type": 3,
@@ -66,10 +66,143 @@
             },
             {
               "type": 3,
-              "name": "schedule",
-              "description": "JSTの曜日・時刻（例 MON@09,FRI@18）",
+              "name": "day",
+              "description": "投稿する曜日（日本時間）",
               "required": true,
-              "max_length": 2000
+              "choices": [
+                {
+                  "name": "月曜",
+                  "value": "MON"
+                },
+                {
+                  "name": "火曜",
+                  "value": "TUE"
+                },
+                {
+                  "name": "水曜",
+                  "value": "WED"
+                },
+                {
+                  "name": "木曜",
+                  "value": "THU"
+                },
+                {
+                  "name": "金曜",
+                  "value": "FRI"
+                },
+                {
+                  "name": "土曜",
+                  "value": "SAT"
+                },
+                {
+                  "name": "日曜",
+                  "value": "SUN"
+                }
+              ]
+            },
+            {
+              "type": 4,
+              "name": "hour",
+              "description": "投稿する時刻（日本時間、毎正時）",
+              "required": true,
+              "choices": [
+                {
+                  "name": "00:00",
+                  "value": 0
+                },
+                {
+                  "name": "01:00",
+                  "value": 1
+                },
+                {
+                  "name": "02:00",
+                  "value": 2
+                },
+                {
+                  "name": "03:00",
+                  "value": 3
+                },
+                {
+                  "name": "04:00",
+                  "value": 4
+                },
+                {
+                  "name": "05:00",
+                  "value": 5
+                },
+                {
+                  "name": "06:00",
+                  "value": 6
+                },
+                {
+                  "name": "07:00",
+                  "value": 7
+                },
+                {
+                  "name": "08:00",
+                  "value": 8
+                },
+                {
+                  "name": "09:00",
+                  "value": 9
+                },
+                {
+                  "name": "10:00",
+                  "value": 10
+                },
+                {
+                  "name": "11:00",
+                  "value": 11
+                },
+                {
+                  "name": "12:00",
+                  "value": 12
+                },
+                {
+                  "name": "13:00",
+                  "value": 13
+                },
+                {
+                  "name": "14:00",
+                  "value": 14
+                },
+                {
+                  "name": "15:00",
+                  "value": 15
+                },
+                {
+                  "name": "16:00",
+                  "value": 16
+                },
+                {
+                  "name": "17:00",
+                  "value": 17
+                },
+                {
+                  "name": "18:00",
+                  "value": 18
+                },
+                {
+                  "name": "19:00",
+                  "value": 19
+                },
+                {
+                  "name": "20:00",
+                  "value": 20
+                },
+                {
+                  "name": "21:00",
+                  "value": 21
+                },
+                {
+                  "name": "22:00",
+                  "value": 22
+                },
+                {
+                  "name": "23:00",
+                  "value": 23
+                }
+              ]
             }
           ]
         },

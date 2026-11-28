@@ -12,7 +12,7 @@ from botocore.exceptions import ClientError
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lambda'))
 from discord_bot.config import Config
 from discord_bot.gatcha.domain import (ADMIN_ROLE_ID, InvalidCommand, Retryable, TooLarge,
-                                       UnknownDelivery, candidates, command, schedule)
+                                       UnknownDelivery, candidates, command)
 from discord_bot.gatcha.service import Service
 from discord_bot.gatcha.store import Store
 from discord_bot.gatcha.transport import Discord, DiscordError, MemberLookup
@@ -127,11 +127,71 @@ class CommandTests(unittest.TestCase):
         with self.assertRaises(InvalidCommand):
             command(request, SOURCE, {SOURCE}, NOW)
 
-    def test_timer_config_supports_independent_multiple_jst_slots(self):
-        self.assertEqual(schedule('MON@09,FRI@18'), [{'day': 0, 'hour': 9}, {'day': 4, 'hour': 18}])
-        for value in ('MON@24', 'MON@09,MON@09', 'MON@09:30', ''):
-            with self.subTest(value=value), self.assertRaises(InvalidCommand):
-                schedule(value)
+    def timer_request(self, day='MON', hour=9):
+        options = [
+            {'type': 3, 'name': 'guild', 'value': DEST},
+            {'type': 3, 'name': 'channel', 'value': CHANNEL},
+            {'type': 3, 'name': 'day', 'value': day},
+            {'type': 4, 'name': 'hour', 'value': hour},
+        ]
+        return interaction(options=[{'type': 2, 'name': 'timer', 'options': [
+            {'type': 1, 'name': 'config', 'options': options}]}], roles=(ADMIN_ROLE_ID,))
+
+    def test_timer_choices_cover_each_weekday_and_whole_hour(self):
+        definition = json.loads((Path(__file__).resolve().parents[1] / 'commands/gatcha.json').read_text(encoding='utf-8'))
+        timer = next(group for group in definition['options'] if group['name'] == 'timer')
+        config = next(action for action in timer['options'] if action['name'] == 'config')
+        options = {option['name']: option for option in config['options']}
+        self.assertEqual(set(options), {'guild', 'channel', 'day', 'hour'})
+        self.assertTrue(all(option['required'] for option in options.values()))
+        self.assertEqual(options['day']['type'], 3)
+        self.assertEqual(options['hour']['type'], 4)
+        self.assertEqual(options['day']['choices'], [
+            {'name': label, 'value': day} for label, day in zip(
+                ['月曜', '火曜', '水曜', '木曜', '金曜', '土曜', '日曜'],
+                ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'])])
+        self.assertEqual(options['hour']['choices'], [
+            {'name': f'{hour:02d}:00', 'value': hour} for hour in range(24)])
+        for day_index, choice in enumerate(options['day']['choices']):
+            for hour_choice in options['hour']['choices']:
+                with self.subTest(day=choice['value'], hour=hour_choice['value']):
+                    result = command(self.timer_request(choice['value'], hour_choice['value']), SOURCE, {SOURCE, DEST}, NOW)
+                    self.assertEqual(result['action'], 'timer_config')
+                    self.assertEqual(result['args'], {'guild': DEST, 'channel': CHANNEL,
+                                     'slots': [{'day': day_index, 'hour': hour_choice['value']}]})
+
+    def test_timer_rejects_invalid_choices_and_option_types(self):
+        invalid = [('day', value) for value in ('MON,FRI', 'UNKNOWN', '', None, 0)]
+        invalid += [('hour', value) for value in (-1, 24, '09', '09:30', 9.5, True, None)]
+        for name, value in invalid:
+            with self.subTest(name=name, value=value), self.assertRaises(InvalidCommand):
+                command(self.timer_request(**{name: value}), SOURCE, {SOURCE, DEST}, NOW)
+        request = self.timer_request()
+        request['data']['options'][0]['options'][0]['options'][-1]['type'] = 3
+        with self.assertRaises(InvalidCommand):
+            command(request, SOURCE, {SOURCE, DEST}, NOW)
+
+    def test_timer_requires_both_choices_and_rejects_legacy_schedule(self):
+        for name in ('day', 'hour'):
+            request = self.timer_request()
+            options = request['data']['options'][0]['options'][0]['options']
+            options[:] = [option for option in options if option['name'] != name]
+            with self.subTest(missing=name), self.assertRaises(InvalidCommand):
+                command(request, SOURCE, {SOURCE, DEST}, NOW)
+        request = self.timer_request()
+        request['data']['options'][0]['options'][0]['options'][2:] = [
+            {'type': 3, 'name': 'schedule', 'value': 'MON@09,FRI@18'}]
+        with self.assertRaises(InvalidCommand):
+            command(request, SOURCE, {SOURCE, DEST}, NOW)
+
+    def test_timer_choices_still_require_source_guild_role_and_allowed_destination(self):
+        requests = [self.timer_request() for _ in range(3)]
+        requests[0]['member']['roles'] = []
+        requests[1]['guild_id'] = DEST
+        requests[2]['data']['options'][0]['options'][0]['options'][0]['value'] = '999999999999999999'
+        for request in requests:
+            with self.subTest(request=request['data']), self.assertRaises(InvalidCommand):
+                command(request, SOURCE, {SOURCE, DEST}, NOW)
 
     def test_history_threshold_is_ten_and_disabled_channels_do_not_count(self):
         works = [{'message_id': str(i), 'channel_id': CHANNEL, 'active': True} for i in range(11)]
@@ -293,12 +353,14 @@ class DeliveryTests(unittest.TestCase):
 
     def test_timer_config_replaces_all_slots_and_timer_remove_stops_it(self):
         self.discord.channel.side_effect = lambda channel: {'id': channel, 'guild_id': DEST, 'type': 0}
-        self.timer('old')
-        slots = [{'day': 4, 'hour': 18}]
+        self.store.put('TIMERS', f'GUILD#{DEST}', guild_id=DEST, channel_id=CHANNEL,
+                       version='old', slots=[{'day': 0, 'hour': 9}, {'day': 4, 'hour': 18}])
+        slots = [{'day': 6, 'hour': 23}]
         self.service.process(job('timer_config', guild=SOURCE, args={'guild': DEST, 'channel': CHANNEL, 'slots': slots}))
         configured = self.store.get('TIMERS', f'GUILD#{DEST}')
         self.assertEqual(configured['slots'], slots)
         self.assertEqual(configured['version'], 'job1')
+        self.assertIn('週1枠', self.discord.reply.call_args.args[1]['content'])
         self.service.process(job('timer_remove', job_id='remove', guild=SOURCE, args={'guild': DEST}))
         self.assertFalse(self.store.get('TIMERS', f'GUILD#{DEST}')['active'])
         self.assertNotIn('slots', self.store.get('TIMERS', f'GUILD#{DEST}'))
