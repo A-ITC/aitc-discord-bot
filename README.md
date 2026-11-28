@@ -6,6 +6,8 @@
 
 [gatchaの仕様・コマンド・導入手順](docs/gatcha.md) に、管理者ロール、登録元チャンネル、JSTの投稿枠、IAM認証のWeb逆引きAPI、失敗時の扱いをまとめています。
 
+[DynamoDBデータ設計](docs/data-tables.md) に、保存する7種類のデータ、キー・属性・JSON例、ジョブ状態、保持方針をまとめています。
+
 ## システム構成
 
 ![AITC Discord Bot システム構成図](docs/system-architecture.svg)
