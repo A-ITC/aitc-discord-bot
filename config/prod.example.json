@@ -5,6 +5,12 @@
   "ArtifactBucket": "YOUR-EXISTING-ARTIFACT-BUCKET",
   "DiscordApplicationId": "111111111111111111",
   "DiscordPublicKey": "REPLACE_WITH_64_HEXADECIMAL_CHARACTERS",
-  "AllowedGuildIds": ["222222222222222222"],
-  "BotTokenParameterName": "/aitc-discord-bot/prod/bot-token"
+  "AllowedGuildIds": [
+    "222222222222222222"
+  ],
+  "BotTokenParameterName": "/aitc-discord-bot/prod/bot-token",
+  "GatchaSourceGuildId": "222222222222222222",
+  "WebLookupApiId": "replacewithwebapiid",
+  "WebLookupRegion": "ap-northeast-1",
+  "WebProfileBaseUrl": "https://a-i-t-c.com"
 }

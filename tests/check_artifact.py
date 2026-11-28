@@ -28,7 +28,7 @@ def check(path):
                 metadata = BytesParser().parsebytes(archive.read(name))
                 versions[metadata["Name"].lower()] = metadata["Version"]
         assert native, "No native libraries found"
-        assert versions == {"cryptography": "50.0.2", "cffi": "2.1.1", "pycparser": "3.12"}, versions
+        assert versions == {"cryptography": "50.0.2", "cffi": "2.1.1", "pycparser": "3.12", "boto3": "1.44.12", "botocore": "1.44.12", "jmespath": "1.1.0", "s3transfer": "0.19.3", "python-dateutil": "2.9.0.post0", "six": "1.17.0", "urllib3": "2.8.0"}, versions
         print(f"Verified {len(names)} ZIP entries, {len(native)} Linux aarch64 libraries, pinned dependencies")
 
 

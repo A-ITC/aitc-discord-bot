@@ -311,3 +311,29 @@ function Restore-CommandSnapshot {
     }
     Write-Host 'Restore endpoint URL, command permission overrides in Discord, and the old process manually; command IDs may have changed.'
 }
+
+
+function Assert-GatchaConfig {
+    param([hashtable]$Config)
+    if ($Config['GatchaSourceGuildId'] -isnot [string] -or $Config.GatchaSourceGuildId -cnotmatch '^[0-9]{17,20}$' -or $Config.GatchaSourceGuildId -cnotin $Config.AllowedGuildIds) { throw 'GatchaSourceGuildId must be an allowed guild ID string' }
+    if ($Config['WebLookupApiId'] -isnot [string] -or $Config.WebLookupApiId -cnotmatch '^[a-z0-9]+$') { throw 'Invalid WebLookupApiId' }
+    if ($Config['WebLookupRegion'] -isnot [string] -or $Config.WebLookupRegion -cnotmatch '^[a-z]{2}(-[a-z]+)+-[0-9]+$') { throw 'Invalid WebLookupRegion' }
+    if ($Config['WebProfileBaseUrl'] -isnot [string] -or $Config.WebProfileBaseUrl -cnotmatch '^https://[A-Za-z0-9.-]+/?$') { throw 'Invalid WebProfileBaseUrl' }
+}
+
+function Sync-GatchaCommands {
+    param([hashtable]$Config, [hashtable]$Session, [string]$DefinitionsPath)
+    Assert-GatchaConfig $Config
+    foreach ($guildId in $Config.AllowedGuildIds) {
+        $names = if ($guildId -ceq $Config.GatchaSourceGuildId) { @('gatcha','gatcha-register','gatcha-remove') } else { @('gatcha') }
+        foreach ($name in $names) {
+            $definition = Get-Content -LiteralPath (Join-Path $DefinitionsPath "$name.json") -Raw | ConvertFrom-Json -AsHashtable
+            if ($name -eq 'gatcha' -and $guildId -cne $Config.GatchaSourceGuildId) { $definition.options = @($definition.options | Where-Object name -CEQ 'draw') }
+            $path = "/applications/$($Config.DiscordApplicationId)/guilds/$guildId/commands"
+            $registered = Invoke-Discord $Session POST $path $definition
+            $actual = Invoke-Discord $Session GET "$path/$($registered.id)"
+            Assert-CommandDefinition $actual $definition
+            Write-Host "Verified $($definition.name) in guild $guildId"
+        }
+    }
+}

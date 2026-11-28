@@ -1,0 +1,94 @@
+{
+  "type": 1,
+  "name": "gatcha",
+  "description": "AITCの作品を抽選・管理します",
+  "options": [
+    {
+      "type": 1,
+      "name": "draw",
+      "description": "ランダムな作品を公開投稿します",
+      "options": [
+        {
+          "type": 3,
+          "name": "server",
+          "description": "登録元サーバー",
+          "choices": [
+            {
+              "name": "AITC",
+              "value": "aitc"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": 2,
+      "name": "channel",
+      "description": "作品の登録元を管理します",
+      "options": [
+        {
+          "type": 1,
+          "name": "add",
+          "description": "実行したチャンネルを登録元に追加します"
+        },
+        {
+          "type": 1,
+          "name": "remove",
+          "description": "実行したチャンネルを登録元から外します"
+        }
+      ]
+    },
+    {
+      "type": 2,
+      "name": "timer",
+      "description": "全サーバーの定時投稿を管理します",
+      "options": [
+        {
+          "type": 1,
+          "name": "config",
+          "description": "指定サーバーの投稿先と全投稿枠を置き換えます",
+          "options": [
+            {
+              "type": 3,
+              "name": "guild",
+              "description": "投稿先サーバーID",
+              "required": true,
+              "min_length": 17,
+              "max_length": 20
+            },
+            {
+              "type": 3,
+              "name": "channel",
+              "description": "投稿先チャンネルID",
+              "required": true,
+              "min_length": 17,
+              "max_length": 20
+            },
+            {
+              "type": 3,
+              "name": "schedule",
+              "description": "JSTの曜日・時刻（例 MON@09,FRI@18）",
+              "required": true,
+              "max_length": 2000
+            }
+          ]
+        },
+        {
+          "type": 1,
+          "name": "remove",
+          "description": "指定サーバーの定時投稿設定を削除します",
+          "options": [
+            {
+              "type": 3,
+              "name": "guild",
+              "description": "投稿先サーバーID",
+              "required": true,
+              "min_length": 17,
+              "max_length": 20
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

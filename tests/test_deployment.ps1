@@ -4,6 +4,10 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $temporaryDirectory = Join-Path $PSScriptRoot ('tmp-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temporaryDirectory | Out-Null
 $config = @{AwsProfile='test';AwsRegion='ap-northeast-1';StackName='bot-prod';ArtifactBucket='bucket';BotTokenParameterName='/bot/token';DiscordApplicationId='111111111111111111';DiscordPublicKey=('a'*64);AllowedGuildIds=@('222222222222222222')}
+$config.GatchaSourceGuildId = '222222222222222222'
+$config.WebLookupApiId = 'webapi123'
+$config.WebLookupRegion = 'ap-northeast-1'
+$config.WebProfileBaseUrl = 'https://a-i-t-c.com'
 $configPath = Join-Path $temporaryDirectory 'config.json'
 [IO.File]::WriteAllText($configPath, ($config | ConvertTo-Json))
 $global:aitcDeployTestState = @{Status='REVIEW_IN_PROGRESS';Requests=@();WrongApplication=$false;FailExecute=$false}
@@ -17,7 +21,12 @@ function aws {
             @{Status='CREATE_COMPLETE';ExecutionStatus='AVAILABLE';Changes=@();Parameters=@(
                 @{ParameterKey='DiscordApplicationId';ParameterValue=$(if ($state.WrongApplication) {'999999999999999999'} else {'111111111111111111'})},
                 @{ParameterKey='DiscordPublicKey';ParameterValue=('a'*64)},
-                @{ParameterKey='AllowedGuildIds';ParameterValue='222222222222222222'}
+                @{ParameterKey='AllowedGuildIds';ParameterValue='222222222222222222'},
+                @{ParameterKey='GatchaSourceGuildId';ParameterValue='222222222222222222'},
+                @{ParameterKey='BotTokenParameterName';ParameterValue='/bot/token'},
+                @{ParameterKey='WebLookupApiId';ParameterValue='webapi123'},
+                @{ParameterKey='WebLookupRegion';ParameterValue='ap-northeast-1'},
+                @{ParameterKey='WebProfileBaseUrl';ParameterValue='https://a-i-t-c.com'}
             )}
         }
         'cloudformation describe-stacks' { @{Stacks=@(@{StackStatus=$state.Status;Outputs=@()})} }
